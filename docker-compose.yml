@@ -1,0 +1,242 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: air-altura-mysql
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: air-altura-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: air-altura-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  flights-seeder:
+    build:
+      context: .
+      dockerfile: Flights-Service/Dockerfile
+    container_name: air-altura-flights-seeder
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+      DB_NAME: FLIGHTS
+      DB_DIALECT: mysql
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      WAIT_FOR: mysql:3306,redis:6379,rabbitmq:5672
+      MIGRATE_CMD: npx sequelize-cli db:migrate --config src/config/config.js --migrations-path src/migrations --env development
+      SEED_CMD: npx sequelize-cli db:seed:all --config src/config/config.js --seeders-path src/seeders --env development
+      START_CMD: echo Flights seeding complete
+
+  flights-service:
+    build:
+      context: .
+      dockerfile: Flights-Service/Dockerfile
+    container_name: air-altura-flights-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      flights-seeder:
+        condition: service_completed_successfully
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+      DB_NAME: FLIGHTS
+      DB_DIALECT: mysql
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      WAIT_FOR: mysql:3306,redis:6379,rabbitmq:5672
+      START_CMD: npm start
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net');const s=net.connect(3000,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  booking-service:
+    build:
+      context: .
+      dockerfile: Booking-service/Dockerfile
+    container_name: air-altura-booking-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      flights-service:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      FLIGHT_SERVICE: http://flights-service:3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+      DB_NAME: bookings_db
+      DB_DIALECT: mysql
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      WAIT_FOR: mysql:3306,redis:6379,rabbitmq:5672,flights-service:3000
+      MIGRATE_CMD: npx sequelize-cli db:migrate --config src/config/config.js --migrations-path src/migrations --env development
+      START_CMD: npm start
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net');const s=net.connect(4000,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: API-Gateway/Dockerfile
+    container_name: air-altura-api-gateway
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      flights-service:
+        condition: service_healthy
+      booking-service:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev}
+      DB_NAME: auth_db
+      DB_DIALECT: mysql
+      JWT_SECRET: ${JWT_SECRET:-localdevsecret}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      FLIGHTS_SERVICE: http://flights-service:3000
+      BOOKING_SERVICE: http://booking-service:4000
+      REDIS_URL: redis://redis:6379
+      SALT_ROUNDS: ${SALT_ROUNDS:-10}
+      ALLOWED_ORIGIN: http://localhost:5173
+      WAIT_FOR: mysql:3306,redis:6379,rabbitmq:5672,flights-service:3000,booking-service:4000
+      MIGRATE_CMD: npx sequelize-cli db:migrate --config src/config/database-config.js --migrations-path src/migrations --env development
+      START_CMD: npm start
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net');const s=net.connect(5000,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: Notifications-Service/Dockerfile
+    container_name: air-altura-notifications-service
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_placeholder}
+      FROM_EMAIL: ${FROM_EMAIL:-onboarding@resend.dev}
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      WAIT_FOR: rabbitmq:5672
+      START_CMD: npm start
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Air-Altura-Frontend/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000
+    container_name: air-altura-frontend
+    restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
