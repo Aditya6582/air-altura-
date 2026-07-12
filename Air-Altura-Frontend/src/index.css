@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500&display=swap');
+@import "tailwindcss";
+
+/* ── Brand color + font tokens exposed to Tailwind v4 utility classes ── */
+@theme {
+  --color-aa-horizon:  #0E3B4D;
+  --color-aa-copper:   #C8754E;
+  --color-aa-cream:    #FAF6F0;
+  --color-aa-mist:     #E8E2D6;
+  --color-aa-ink:      #1A2731;
+  --color-aa-slate:    #5C6670;
+  --color-aa-confirm:  #4A7C59;
+  --color-aa-caution:  #B84A3C;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+}
+
+/* ── CSS custom properties for inline style usage ── */
+:root {
+  --aa-horizon:  #0E3B4D;
+  --aa-copper:   #C8754E;
+  --aa-cream:    #FAF6F0;
+  --aa-mist:     #E8E2D6;
+  --aa-ink:      #1A2731;
+  --aa-slate:    #5C6670;
+  --aa-confirm:  #4A7C59;
+  --aa-caution:  #B84A3C;
+}
+
+/* ── Base resets ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+body {
+  background-color: #FAF6F0;
+  color: #1A2731;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.animate-fade-up   { animation: fadeUp 600ms cubic-bezier(0.25,0,0.1,1) both; }
+.animate-fade-up-1 { animation: fadeUp 600ms  80ms cubic-bezier(0.25,0,0.1,1) both; }
+.animate-fade-up-2 { animation: fadeUp 600ms 160ms cubic-bezier(0.25,0,0.1,1) both; }
+.animate-fade-up-3 { animation: fadeUp 600ms 240ms cubic-bezier(0.25,0,0.1,1) both; }
+.animate-fade-in   { animation: fadeIn 800ms cubic-bezier(0.25,0,0.1,1) both; }
+.animate-marquee   { animation: marquee 60s linear infinite; }
+
+/* ── Focus ring ── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14,59,77,0.18);
+}
+
+/* ── Shared input style (used across SearchWidget, AuthPage, etc.) ── */
+.aa-input {
+  width: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: #1A2731;
+  background: #fff;
+  border: 0.5px solid #E8E2D6;
+  border-radius: 8px;
+  padding: 14px 16px;
+  outline: none;
+  transition: border-color 300ms cubic-bezier(0.25,0,0.1,1),
+              box-shadow    300ms cubic-bezier(0.25,0,0.1,1);
+}
+.aa-input:focus {
+  border-color: #0E3B4D;
+  box-shadow: 0 0 0 3px rgba(14,59,77,0.12);
+}
+.aa-input::placeholder { color: #5C6670; opacity: 0.7; }
+
+/* ── Date input: tame Chrome's native mask and icon ── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.35;
+  cursor: pointer;
+  scale: 0.9;
+}
+input[type="date"]::-webkit-datetime-edit { padding: 0; }
+input[type="date"]::-webkit-datetime-edit-text { color: #5C6670; opacity: 0.5; }
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: #5C6670;
+  opacity: 0.55;
+}
+input[type="date"][value]:not([value=""])::-webkit-datetime-edit-day-field,
+input[type="date"][value]:not([value=""])::-webkit-datetime-edit-month-field,
+input[type="date"][value]:not([value=""])::-webkit-datetime-edit-year-field {
+  color: #1A2731;
+  opacity: 1;
+}
